@@ -1,0 +1,26 @@
+---
+- name: update-ca
+  shell: /sbin/update-ca-certificates
+
+- name: restart nm
+  service:
+    name: NetworkManager
+    state: restarted
+
+- name: restart sshd
+  service:
+    name: ssh
+    state: restarted
+
+- name: sysctl
+  shell: sysctl -p /etc/sysctl.d/*.conf
+
+- name: resolved
+  service:
+    name: systemd-resolved
+    state: restarted
+
+- name: systemd
+  systemd:
+    daemon-reload: 1
+    daemon-reexec: 1

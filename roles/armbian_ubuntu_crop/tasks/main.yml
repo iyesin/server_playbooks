@@ -1,0 +1,420 @@
+---
+
+- name: Lower boot resolution (to save some RAM and CPU)
+  lineinfile:
+    path: /boot/armbianEnv.txt
+    regexp: '^disp_mode=.+'
+    line: disp_mode=480i
+
+- name: Enable debug WiFi region
+  lineinfile:
+    path: /boot/armbian_first_run.txt.template
+    regexp: '^FR_net_wifi_countrycode='
+    line: FR_net_wifi_countrycode='00'
+
+- name: WiFi random MAC on scan (1/2)
+  lineinfile:
+    path: /etc/NetworkManager/NetworkManager.conf
+    regexp: '^wifi.scan-rand-mac-address=no'
+    line: wifi.scan-rand-mac-address=yes
+  notify: restart nm
+
+- name: WiFi random MAC on scan (2/2)
+  lineinfile:
+    path: /etc/NetworkManager/conf.d/10-override-wifi-random-mac-disable.conf
+    regexp: '^wifi.scan-rand-mac-address=no'
+    line: wifi.scan-rand-mac-address=yes
+  notify: restart nm
+
+- name: Cut trusted CAs list
+  copy:
+    src: ca-certificates.conf
+    dest: /etc/ca-certificates.conf
+    mode: preserve
+  notify: update-ca
+
+- name: Disable Armbian updates (will manage it later)
+  copy:
+    dest: /etc/cron.d/armbian-updates
+    content: '# no armbian updates for now'
+    mode: preserve
+
+- name: Disable sysstat reporting
+  copy:
+    dest: /etc/cron.d/sysstat
+    content: '# do not wear sdcard'
+    mode: preserve
+
+- name: Run less MOTD modules
+  lineinfile:
+    path: /etc/default/armbian-motd
+    regexp: '^MOTD_DISABLE=.+'
+    line: MOTD_DISABLE="header tips updates"
+
+- name: Don't waste CPU on big ZRAM
+  copy:
+    src: armbian-zram-config
+    dest: /etc/default/armbian-zram-config
+    mode: preserve
+
+- name: Tune RAMLOG
+  copy:
+    src: armbian-ramlog
+    dest: /etc/default/armbian-ramlog
+    mode: preserve
+
+- name: Enable debug WiFi region
+  copy:
+    src: crda
+    dest: /etc/default/crda
+    mode: preserve
+
+- name: Disable debug output of dhclient
+  copy:
+    dest: /etc/dhcp/debug
+    content: ''
+    mode: preserve
+
+- name: Don't need active avahi autoipd on server
+  copy:
+    dest: /etc/dhcp/dhclient-enter-hooks.d/avahi-autoipd
+    content: ''
+    mode: preserve
+
+- name: Be a bit more aggressive to DHCP
+  lineinfile:
+    path: /etc/dhcp/dhclient.conf
+    regexp: '^retry .+'
+    line: retry 30;
+
+- name: Tune FS scrubbing
+  copy:
+    src: e2scrub.conf
+    dest: /etc/e2scrub.conf
+    mode: preserve
+
+- name: Bake in busybox to initramfs
+  lineinfile:
+    path: /etc/initramfs-tools/initramfs.conf
+    regexp: '^BUSYBOX='
+    line: BUSYBOX=y
+
+- name: Remove expensive checks
+  copy:
+    dest: {{item}}
+    content: ''
+    mode: preserve
+  with_items:
+    - /etc/profile.d/armbian-check-first-login.sh
+    - /etc/profile.d/armbian-check-first-login-reboot.sh
+    - /etc/profile.d/armbian-ssh-title.sh
+
+- name: Empty resolvconf head
+  copy:
+    dest: /etc/resolvconf/resolv.conf.d/head
+    content: ''
+    mode: preserve
+
+- name: Remove ECDSA host key
+  file:
+    path: {{item}}
+    state: absent
+  with_items:
+    - /etc/ssh/ssh_host_ecdsa_key
+    - /etc/ssh/ssh_host_ecdsa_key.pub
+  notify: restart sshd
+
+- name: Re-config sshd
+  copy:
+    dest: /etc/ssh/{{item}}
+    src: sshd/{{item}}
+  with_items:
+    - ssh_config
+    - sshd_config
+    - moduli
+    - sshd_config.d/ca.conf
+    - sshd_config.d/CA_ed25519.pub
+    - sshd_config.d/CA_rsa.pub
+  notify: restart sshd
+
+- name: Re-generate host keys
+  shell: ssh-keygen -q -N '' -C '' -b 4096 -t {{item}} -f /etc/ssh/ssh_host_{{item}}_key
+  with_items:
+    - ed25519
+    - rsa
+  notify: restart sshd
+
+- name: Pull generated public keys for signing
+  fetch:
+    src: /etc/ssh/ssh_host_{{item}}_key.pub
+    dest: /tmp/ssh_keys-{{ inventory_hostname }}/
+    flat: yes
+  with_items:
+    - ed25519
+    - rsa
+
+- name: Certify ssh host keys
+  delegate_to: 127.0.0.1
+  shell: ~/opt/bin/certify_ssh_host_key {{item}}
+  with_fileglob: /tmp/ssh_keys-{{ inventory_hostname }}/*key.pub
+
+- name: Push certified public keys back
+  copy:
+    src: /tmp/ssh_keys-{{ inventory_hostname }}/ssh_host_{{item}}_key-cert.pub
+    dest: /etc/ssh/ssh_host_{{item}}_key-cert.pub
+    mode: 0400
+  with_items:
+    - ed25519
+    - rsa
+  notify: restart sshd
+
+- name: Set default congestion control for TCP
+  copy:
+    src: 99-tcp_congestion_control.conf
+    dest: /etc/sysctl.d/99-tcp_congestion_control.conf
+    mode: 0400
+  notify: sysctl
+
+- name: Use DoT resolvers by default
+  copy:
+    src: resolved.conf
+    dest: /etc/systemd/
+    mode: 0400
+  notify: resolved
+
+- name: Reboot server on crash
+  copy:
+    src: system.conf
+    dest: /etc/systemd/
+    mode: 0400
+  notify: systemd
+
+- name: remove unused services
+  file:
+    path: /usr/lib/systemd/system/{{item}}.service
+    state: absent
+  with_items:
+    - systemd-localed
+    - systemd-timedated
+
+- name: purge documents
+  file:
+    path: /usr/share/doc
+    state: absent
+
+- name: purge non-English locales
+  file:
+    path: /usr/share/locale/{{ item }}
+    state: absent
+  with_items:
+    - ach
+    - af
+    - ak
+    - aln
+    - am
+    - an
+    - ar
+    - as
+    - ast
+    - ay
+    - az
+    - ba
+    - bal
+    - bar
+    - be
+    - be@latin
+    - bg
+    - bi
+    - bn
+    - bn_BD
+    - bn_IN
+    - bo
+    - br
+    - brx
+    - bs
+    - byn
+    - ca
+    - ce
+    - ch
+    - chr
+    - ckb
+    - crh
+    - cs
+    - csb
+    - cv
+    - cy
+    - da
+    - de
+    - dv
+    - dz
+    - ee
+    - el
+    - eo
+    - es
+    - es_MX
+    - et
+    - eu
+    - fa
+    - ff
+    - fi
+    - fo
+    - fr
+    - frp
+    - fur
+    - fy
+    - ga
+    - gd
+    - gez
+    - gl
+    - gn
+    - gu
+    - gv
+    - ha
+    - haw
+    - he
+    - hi
+    - hr
+    - ht
+    - hu
+    - hy
+    - ia
+    - id
+    - ilo
+    - io
+    - is
+    - it
+    - iu
+    - ja
+    - jam
+    - ka
+    - kab
+    - ki
+    - kk
+    - kl
+    - km
+    - kn
+    - ko
+    - kok
+    - ks
+    - ku
+    - kv
+    - kw
+    - ky
+    - la
+    - lo
+    - lt
+    - lt_LT
+    - lv
+    - lv_LV
+    - mai
+    - mg
+    - mhr
+    - mi
+    - mk
+    - ml
+    - mn
+    - mo
+    - mr
+    - ms
+    - mt
+    - my
+    - na
+    - nah
+    - nb
+    - nb_NO
+    - nds
+    - ne
+    - nl
+    - nn
+    - nso
+    - nv
+    - oc
+    - or
+    - pa
+    - pap
+    - pi
+    - pl
+    - ps
+    - pt
+    - pt_BR
+    - rm
+    - ro
+    - ru
+    - rw
+    - sc
+    - sd
+    - si
+    - si_LK
+    - sk
+    - sl
+    - so
+    - son
+    - sq
+    - sr
+    - sr@latin
+    - sv
+    - sw
+    - ta
+    - te
+    - tg
+    - th
+    - ti
+    - tig
+    - tk
+    - tl
+    - tr
+    - tt
+    - tt@iqtelif
+    - ug
+    - uk
+    - ur
+    - uz
+    - ve
+    - vi
+    - vi_VN
+    - wa
+    - wal
+    - wo
+    - xh
+    - yo
+    - zh_CN
+    - zh_CN.GB2312
+    - zh_Hant
+    - zh_HK
+    - zh_TW
+    - zh_TW.Big5
+    - zu
+
+- name: purge non-English man pages
+  file:
+    path: /usr/share/man/{{ item }}
+    state: absent
+  with_items:
+    - cs
+    - da
+    - de
+    - es
+    - fi
+    - fr
+    - fr.ISO8859-1
+    - fr.UTF-8
+    - gl
+    - hu
+    - id
+    - it
+    - ja
+    - ko
+    - nl
+    - pl
+    - pt
+    - pt_BR
+    - ru
+    - sl
+    - sr
+    - sv
+    - tr
+    - zh_CN
+    - zh_TW
+
+- name: Clean old dpkg files
+  shell: find / -type f -name '*.dpkg-old' -print0 | xargs -0 -- rm -f
