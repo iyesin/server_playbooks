@@ -115,59 +115,6 @@
     content: ''
     mode: preserve
 
-- name: Remove ECDSA host key
-  file:
-    path: {{item}}
-    state: absent
-  with_items:
-    - /etc/ssh/ssh_host_ecdsa_key
-    - /etc/ssh/ssh_host_ecdsa_key.pub
-  notify: restart sshd
-
-- name: Re-config sshd
-  copy:
-    dest: /etc/ssh/{{item}}
-    src: sshd/{{item}}
-  with_items:
-    - ssh_config
-    - sshd_config
-    - moduli
-    - sshd_config.d/ca.conf
-    - sshd_config.d/CA_ed25519.pub
-    - sshd_config.d/CA_rsa.pub
-  notify: restart sshd
-
-- name: Re-generate host keys
-  shell: ssh-keygen -q -N '' -C '' -b 4096 -t {{item}} -f /etc/ssh/ssh_host_{{item}}_key
-  with_items:
-    - ed25519
-    - rsa
-  notify: restart sshd
-
-- name: Pull generated public keys for signing
-  fetch:
-    src: /etc/ssh/ssh_host_{{item}}_key.pub
-    dest: /tmp/ssh_keys-{{ inventory_hostname }}/
-    flat: yes
-  with_items:
-    - ed25519
-    - rsa
-
-- name: Certify ssh host keys
-  delegate_to: 127.0.0.1
-  shell: ~/opt/bin/certify_ssh_host_key {{item}}
-  with_fileglob: /tmp/ssh_keys-{{ inventory_hostname }}/*key.pub
-
-- name: Push certified public keys back
-  copy:
-    src: /tmp/ssh_keys-{{ inventory_hostname }}/ssh_host_{{item}}_key-cert.pub
-    dest: /etc/ssh/ssh_host_{{item}}_key-cert.pub
-    mode: 0400
-  with_items:
-    - ed25519
-    - rsa
-  notify: restart sshd
-
 - name: Set default congestion control for TCP
   copy:
     src: 99-tcp_congestion_control.conf

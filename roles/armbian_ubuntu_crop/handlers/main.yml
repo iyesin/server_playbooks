@@ -7,11 +7,6 @@
     name: NetworkManager
     state: restarted
 
-- name: restart sshd
-  service:
-    name: ssh
-    state: restarted
-
 - name: sysctl
   shell: sysctl -p /etc/sysctl.d/*.conf
 
