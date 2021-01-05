@@ -18,8 +18,7 @@
     - sshd_config
     - moduli
     - sshd_config.d/ca.conf
-    - sshd_config.d/CA_ed25519.pub
-    - sshd_config.d/CA_rsa.pub
+    - sshd_config.d/trustedCAs.pub
   notify: restart sshd
 
 - name: Re-generate host keys
