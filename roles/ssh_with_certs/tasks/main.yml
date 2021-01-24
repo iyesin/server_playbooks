@@ -28,26 +28,24 @@
     - rsa
   notify: restart sshd
 
-- name: Pull generated public keys for signing
-  fetch:
-    src: /etc/ssh/ssh_host_{{item}}_key.pub
-    dest: /tmp/ssh_keys-{{ inventory_hostname }}/
-    flat: yes
-  with_items:
-    - ed25519
-    - rsa
+- name: Get certification access parameters
 
 - name: Certify ssh host keys
-  delegate_to: 127.0.0.1
-  shell: ~/opt/bin/certify_ssh_host_key {{item}}
-  with_fileglob: /tmp/ssh_keys-{{ inventory_hostname }}/*key.pub
-
-- name: Push certified public keys back
-  copy:
-    src: /tmp/ssh_keys-{{ inventory_hostname }}/ssh_host_{{item}}_key-cert.pub
-    dest: /etc/ssh/ssh_host_{{item}}_key-cert.pub
-    mode: 0400
+  uri:
+    method: POST
+    url: "{{ certify_url }}"
+    body_format: form-multipart
+    return_content: true
+    status_code: [ 200 ]
+    headers:
+      {{ certification_token_name }}: "{{ certification_token }}"
+    body:
+      "ssh_host_{{item}}_key.pub":
+        filename: /etc/ssh/ssh_host_{{item}}_key.pub
+        mime_type: application/octet-stream
   with_items:
     - ed25519
     - rsa
+  when: certify_url is defined and certify_url != ""
   notify: restart sshd
+  register: cert_pubs
