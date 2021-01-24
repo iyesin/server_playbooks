@@ -122,6 +122,51 @@
     mode: 0400
   notify: sysctl
 
+- name: remove extra packages
+  package:
+    name: "{{ item }}"
+    state: absent
+  with_items:
+    - htop
+    - f3
+    - iozone3
+    - nano
+    - fbset
+    - unattended-upgrades
+    - iotop
+    - stress
+    - hdparm
+    - iperf3
+    - avahi-autoipd
+    - iputils-arping
+    - qrencode
+    - profile-sync-daemon
+    - screen
+
+- name: add extra packages
+  package:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - sunxi-tools
+    - bridge-utils
+    - iw
+    - wpasupplicant
+    - sudo
+    - wireless-regdb
+    - initramfs-tools
+    - ca-certificates
+    - iptables
+    - btrfs-progs
+    - vim
+    - pciutils
+    - pv
+    - dnsutils
+    - rfkill
+    - bash-completion
+    - hostapd
+    - tmux
+
 - name: Use DoT resolvers by default
   copy:
     src: resolved.conf
