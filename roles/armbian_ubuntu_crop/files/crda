@@ -7,5 +7,9 @@
 # country code suitable for your location or you may infringe on local
 # legislature. See `/usr/share/zoneinfo/zone.tab' for a table of timezone
 # descriptions containing ISO/IEC 3166-1 alpha2 country codes.
-
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# !!! THIS IS DEBUG PURPOSE ONLY !!!
+# !!!   DO NOT USE IT OUTSIDE    !!!
+# !!! RADIO ISOLATED ENVIRONMENT !!!
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 REGDOMAIN=00
