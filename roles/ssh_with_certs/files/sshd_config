@@ -1,6 +1,5 @@
 Include /etc/ssh/sshd_config.d/*.conf
 
-Port 65022
 #AddressFamily any
 #ListenAddress 0.0.0.0
 #ListenAddress ::
