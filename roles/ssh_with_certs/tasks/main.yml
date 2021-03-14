@@ -21,6 +21,15 @@
     - sshd_config.d/trustedCAs.pub
   notify: restart sshd
 
+- name: Change default port for sshd
+  template:
+    dest: /etc/ssh/sshd_config.d/move_port.conf
+    src: ssh_port_setting.j2
+    owner: root
+    group: wheel
+    mode: '0440'
+  notify: restart sshd
+
 - name: Re-generate host keys
   shell: ssh-keygen -q -N '' -C '' -b 4096 -t {{item}} -f /etc/ssh/ssh_host_{{item}}_key
   with_items:
